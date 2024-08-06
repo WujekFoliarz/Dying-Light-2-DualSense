@@ -375,7 +375,7 @@ void read() {
                     setLightbar(1, 0, 0);
                 }
             }
-            else if (immunity < 0.05 && immunity > 0.45) {
+            else if (immunity > 0.05 && immunity < 0.45) {
                 if (immunityBeep == 50 * immunity) {
                     immunityBeep = 0;
                 }
