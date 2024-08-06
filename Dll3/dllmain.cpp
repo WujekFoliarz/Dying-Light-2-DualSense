@@ -111,6 +111,8 @@ int startSendingToService() {
     return 0;
 }
 
+uintptr_t gameDllPointer;
+
 DWORD64* jmpBackAdaptiveTriggers;
 __attribute__((naked))
 void adaptiveTriggersHook() {
@@ -181,10 +183,49 @@ void clipsizeHook() {
     }
 }
 
-bool compare_float(float x, float y, float epsilon = 0.01f) {
-    if (fabs(x - y) < epsilon)
-        return true; //they are same
-    return false; //they are not same
+DWORD64* jmpBackPause;
+unsigned short pauseStatus = 0;
+__attribute((naked))
+void pauseHook() {
+    __asm {
+        mov dl, 0x01
+        and eax, -0x03
+        or eax, 0x01
+        mov [rbx + 0x000009B8], eax
+        mov [pauseStatus], 0x1
+        mov rax, qword ptr[jmpBackPause]
+        jmp rax
+    }
+}
+
+DWORD64* jmpBackUnpause;
+DWORD64* callUnpause;
+__attribute((naked))
+void unpauseHook() {
+    __asm {
+        mov rax, qword ptr[callUnpause]
+        lea rdx, [rbx + 0x00000A20]
+        mov rcx, rbx
+        call rax
+        or dword ptr[rbx + 0x000009B8], 0x04
+        mov [pauseStatus], 0x0
+        mov rax, qword ptr [jmpBackUnpause]
+        jmp rax
+    }
+}
+
+DWORD64* jmpBackFlashlight;
+unsigned short flashlightStatus = 0;
+__attribute((naked))
+void flashlightHook() {
+    __asm {
+        mov [r14 + 0x000001B4], eax
+        mov [flashlightStatus], eax
+        mov r8d, 0x00010000
+        mov rax, [r14]
+        mov r15, qword ptr[jmpBackFlashlight]
+        jmp r15
+    }
 }
 
 void setTrigger(TriggerModes triggerMode, int triggerThreshold, bool rightTrigger, int force1, int force2, int force3, int force4, int force5, int force6, int force7) {
@@ -212,139 +253,157 @@ void setTrigger(TriggerModes triggerMode, int triggerThreshold, bool rightTrigge
     }
 }
 
+void setLightbar(int _R, int _G, int _B) {
+    R = _R;
+    G = _G;
+    B = _B;
+}
+
 void read() {
     float lastImmunity = 0;
     bool firstBeepPlayed = false;
     float immunityBeep = 0;
-    unsigned short lastClipsize = 0;
     animationData animation;
+    pauseData pause;
+    flashlightData flashlight;
     while (true) {
         animation = static_cast<animationData>(fppAnimation);
-        switch (animation)
-        {
-        case EMPTY_HANDED_IDLE:
+        pause = static_cast<pauseData>(pauseStatus);
+        flashlight = static_cast<flashlightData>(flashlightStatus);
+        //std::cout << pause << std::endl;
+        if (pause == UNPAUSED) {
+            switch (animation)
+            {
+            case EMPTY_HANDED_IDLE:
+                setTrigger(Rigid_B, 0, true, 0, 0, 0, 0, 0, 0, 0);
+                break;
+            case EMPTY_HANDED_RUNNING:
+                setTrigger(Rigid_B, 0, true, 0, 0, 0, 0, 0, 0, 0);
+                break;
+            case ONE_H_DEFAULT:
+                setTrigger(Pulse_A, 0, true, 20, 255, 0, 0, 0, 0, 0);
+                break;
+
+            case ONE_H_SWING_LEFT:
+                break;
+
+            case ONE_H_SWING_RIGHT:
+                break;
+
+            case TWO_H_DEFAULT:
+                setTrigger(Rigid, 0, true, 0, 255, 0, 0, 0, 0, 0);
+                break;
+
+            case TWO_H_SWING_LEFT:
+                break;
+
+            case TWO_H_SWING_RIGHT:
+                break;
+
+            case LIGHT_TWO_H_DEFAULT:
+                break;
+
+            case POLEARM_DEFAULT:
+                setTrigger(Pulse_A, 0, true, 20, 255, 0, 0, 0, 0, 0);
+                break;
+
+            case FISTS_DEFAULT:
+                setTrigger(Rigid, 0, true, 125, 0, 0, 0, 0, 0, 0);
+                break;
+
+            case BOW_DEFAULT:
+                setTrigger(Rigid, 0, true, 0, 255, 0, 255, 255, 255, 0);
+                break;
+
+            case PISTOL_DEFAULT:
+                setTrigger(Pulse, 150, true, 80, 170, 0, 0, 0, 0, 0);
+                break;
+
+            case SMG_DEFAULT:
+                if (ClipSize > 0) {
+                    setTrigger(Pulse_B, 150, true, 14, 255, 80, 0, 0, 0, 0);
+                }
+                else {
+                    setTrigger(Pulse, 255, true, 160, 200, 100, 0, 0, 0, 0);
+                }
+                break;
+
+            case SMG_RELOADING:
+                setTrigger(Pulse, 0, true, 160, 200, 100, 0, 0, 0, 0);
+                break;
+
+            case AUTOMATIC_RIFLE_DEFAULT:
+                if (ClipSize > 0) {
+                    setTrigger(Pulse_B, 150, true, 10, 255, 80, 0, 0, 0, 0);
+                }
+                else {
+                    setTrigger(Pulse, 255, true, 160, 200, 100, 0, 0, 0, 0);
+                }
+                break;
+
+            case AUTOMATIC_RIFLE_RELOADING:
+                setTrigger(Pulse, true, 0, 160, 200, 100, 0, 0, 0, 0);
+                break;
+
+            case SHOTGUN_DEFAULT:
+                if (ClipSize > 0) {
+                    setTrigger(Pulse_AB, 150, true, 255, 0, 255, 255, 255, 0, 0);
+                }
+                else {
+                    setTrigger(Pulse_AB, 255, true, 1, 0, 255, 255, 255, 0, 0);
+                }
+                break;
+
+            case SHOTGUN_RELOADING:
+                setTrigger(Pulse_AB, 0, true, 1, 0, 255, 255, 255, 0, 0);
+                break;
+
+            default:
+                break;
+            }
+
+            if (immunity == 0) {
+                if (immunityBeep == 300) {
+                    immunityBeep = 0;
+                }
+                else if (immunityBeep > 150) {
+                    immunityBeep++;
+                    setLightbar(255, 0, 0);
+                }
+                else {
+                    immunityBeep++;
+                    setLightbar(1, 0, 0);
+                }
+            }
+            else if (immunity < 0.05 && immunity > 0.45) {
+                if (immunityBeep == 50 * immunity) {
+                    immunityBeep = 0;
+                }
+                else if (immunityBeep > 25 * immunity) {
+                    immunityBeep++;
+                    setLightbar(255, 0, 0);
+                }
+                else {
+                    immunityBeep++;
+                    setLightbar(1, 0, 0);
+                }
+            }
+            else {
+                if (flashlight == ON) {
+                    setLightbar(255, 255, 255);
+                }
+                else {
+                    setLightbar(0, 0, 100);
+                }
+            }
+        }
+        else {
+            setTrigger(Rigid_B, 0, false, 0, 0, 0, 0, 0, 0, 0);
             setTrigger(Rigid_B, 0, true, 0, 0, 0, 0, 0, 0, 0);
-            break;
-        case EMPTY_HANDED_RUNNING:
-            setTrigger(Rigid_B, 0, true, 0, 0, 0, 0, 0, 0, 0);
-            break;
-        case ONE_H_DEFAULT:
-            setTrigger(Pulse_A, 0, true, 20, 255, 0, 0, 0, 0, 0);
-            break;
-
-        case ONE_H_SWING_LEFT:
-            break;
-
-        case ONE_H_SWING_RIGHT:
-            break;
-
-        case TWO_H_DEFAULT:
-            setTrigger(Rigid, 0, true, 0, 255, 0, 0, 0, 0, 0);
-            break;
-
-        case TWO_H_SWING_LEFT:
-            break;
-
-        case TWO_H_SWING_RIGHT:
-            break;
-
-        case LIGHT_TWO_H_DEFAULT:
-            break;
-
-        case POLEARM_DEFAULT:
-            setTrigger(Pulse_A, 0, true, 20, 255, 0, 0, 0, 0, 0);
-            break;
-
-        case FISTS_DEFAULT:
-            setTrigger(Rigid,0, true, 125, 0, 0, 0, 0, 0, 0);
-            break;
-
-        case BOW_DEFAULT:
-            setTrigger(Rigid,0, true, 0,255,0,255,255,255,0);
-            break;
-
-        case PISTOL_DEFAULT:
-            setTrigger(Pulse, 150, true, 80, 170, 0, 0, 0, 0, 0);
-            break;
-
-        case SMG_DEFAULT:
-            if (ClipSize > 0) {
-                setTrigger(Pulse_B, 150, true, 14, 255, 80, 0, 0, 0, 0);
-                lastClipsize = ClipSize;
-            }
-            else {
-                setTrigger(Pulse,255, true, 160, 200, 100, 0, 0, 0, 0);
-            }
-            break;
-
-        case SMG_RELOADING:
-            setTrigger(Pulse,0, true, 160, 200, 100, 0, 0, 0, 0);
-            break;
-
-        case AUTOMATIC_RIFLE_DEFAULT:
-            if (ClipSize > 0) {
-                setTrigger(Pulse_B, 150, true, 10, 255, 80, 0, 0, 0, 0);
-            }
-            else {
-                setTrigger(Pulse, 255,true, 160, 200, 100, 0, 0, 0, 0);
-            }
-            break;
-
-        case AUTOMATIC_RIFLE_RELOADING:
-            setTrigger(Pulse, true,0,160, 200, 100, 0, 0, 0, 0);
-            break;
-
-        case SHOTGUN_DEFAULT:
-            if (ClipSize > 0) {
-                setTrigger(Pulse_AB, 150, true, 255, 0, 255, 255, 255, 0, 0);
-            }
-            else {
-                setTrigger(Pulse_AB,255, true, 1, 0, 255, 255, 255, 0, 0);
-            }
-            break;
-
-        case SHOTGUN_RELOADING:
-            setTrigger(Pulse_AB,0, true, 1, 0, 255, 255, 255, 0, 0);
-            break;
-
-        default:
-            break;
+            setLightbar(0, 0, 0);
         }
 
-        if (immunity == 0) {
-            if (immunityBeep == 300) {
-                immunityBeep = 0;
-            }
-            else if (immunityBeep > 150) {
-                immunityBeep++;
-                R = 255;
-                G = 0;
-                B = 0;
-            }
-            else {
-                immunityBeep++;
-                R = 1;
-                G = 0;
-                B = 0;
-            }
-        }
-        else if (immunity < 0.05 && immunity > 0.45) {
-            if (immunityBeep == 50 * immunity) {
-                immunityBeep = 0;
-            }
-            else if (immunityBeep > 25 * immunity) {
-                immunityBeep++;
-                R = 255;
-                G = 0;
-                B = 0;
-            }
-            else {
-                immunityBeep++;
-                R = 1;
-                G = 0;
-                B = 0;
-            }
-        }
+       
         Sleep(1);
     }
 }
@@ -354,25 +413,32 @@ void inject() {
 
     Sleep(8000);
 
+    std::cout << "----------------------------------" << std::endl;
+
     HMODULE gameDllModule = GetModuleHandle(L"gamedll_ph_x64_rwdi.dll");
+    gameDllPointer = (uintptr_t)gameDllModule;
     if (gameDllModule == NULL) {
         std::cerr << "Failed to get module handle." << std::endl;
-        std::cout << (DWORD)gameDllModule << std::endl;
+        std::wcout << L"Module Handle: 0x" << std::hex << (uintptr_t)gameDllPointer << std::endl;
     }
     else {
         std::cout << "Module gamedll_ph_x64_rwdi.dll found at: ";
-        std::cout << (DWORD)gameDllModule << std::endl;
+        std::wcout << L"Module Handle: 0x" << std::hex << (uintptr_t)gameDllPointer << std::endl;
     }
 
     HMODULE engineDllModule = GetModuleHandle(L"engine_x64_rwdi.dll");
     if (engineDllModule == NULL) {
         std::cerr << "Failed to get module handle." << std::endl;
-        std::cout << (DWORD)engineDllModule << std::endl;
+        std::wcout << L"Module Handle: 0x" << std::hex << (uintptr_t)engineDllModule << std::endl;
     }
     else {
         std::cout << "Module engine_x64_rwdi.dll found at: ";
-        std::cout << (DWORD)engineDllModule << std::endl;
+        std::wcout << L"Module Handle: 0x" << std::hex << (uintptr_t)engineDllModule << std::endl;
     }
+
+    Sleep(1000);
+
+    std::cout << "----------------------------------" << std::endl;
 
     DWORD64* fppAnimationAddress = utils.scanModuleMemory(gameDllModule, "89 4E 18 49 8B CF");
     std::cout << "fppAnimation function: ";
@@ -401,6 +467,39 @@ void inject() {
     jmpBackClipsize = utils.scanModuleMemory(gameDllModule, "5F C3 48 8B 5C 24 30 0F 57 C0 48 83 C4 20 5F C3 CC CC CC CC CC CC CC CC CC CC CC 40 53");
     std::cout << "clipsize jmp back: ";
     std::cout << jmpBackClipsize << std::endl;
+
+    std::cout << "----------------------------------" << std::endl;
+
+    DWORD64* pauseAddress = utils.scanModuleMemory(gameDllModule, "B2 01 83 E0 FD 83 C8 01 89 83 B8 09 00 00");
+    std::cout << "pause function: ";
+    std::cout << pauseAddress << std::endl;
+    utils.Detour(reinterpret_cast<DWORD*>((void*)pauseAddress), pauseHook, 14);
+    jmpBackPause = utils.scanModuleMemory(gameDllModule, "48 8B 0D 08 F9 48 02 48 8B 01");
+    std::cout << "pause jmp back: ";
+    std::cout << jmpBackPause << std::endl;
+
+    std::cout << "----------------------------------" << std::endl;
+
+    DWORD64* unpauseAddress = utils.scanModuleMemory(gameDllModule, "48 8D 93 20 0A 00 00 48 8B CB FF 15 7F 90 1D 01 83 8B B8 09 00 00 04");
+    std::cout << "unpause function: ";
+    std::cout << unpauseAddress << std::endl;
+    utils.Detour(reinterpret_cast<DWORD*>((void*)unpauseAddress), unpauseHook, 23);
+    jmpBackUnpause = utils.scanModuleMemory(gameDllModule, "48 8B 74 24 30 48 8B 7C 24 38 48 8B 5C 24 40 48 83 C4 20 5D C3 CC CC CC 40 53");
+    callUnpause = utils.scanModuleMemory(engineDllModule, "48 8B 49 08 48 8B 01 48 FF A0 E0 04 00 00 CC CC 48 83 3D 10 75 9F 01 00");
+    std::cout << "unpause jmp back: ";
+    std::cout << jmpBackUnpause << std::endl;
+    std::cout << "call unpause: ";
+    std::cout << callUnpause << std::endl;
+
+    std::cout << "----------------------------------" << std::endl;
+
+    DWORD64* flashlightAddress = utils.scanModuleMemory(gameDllModule, "41 89 86 B4 01 00 00 41 B8 00 00 01 00 49 8B 06");
+    std::cout << "flashlight function: ";
+    std::cout << flashlightAddress << std::endl;
+    utils.Detour(reinterpret_cast<DWORD*>((void*)flashlightAddress), flashlightHook, 16);
+    jmpBackFlashlight = utils.scanModuleMemory(gameDllModule, "49 8B CE 48 8B 15 9F F8 F5 01");
+    std::cout << "flashlight jmp back: ";
+    std::cout << jmpBackFlashlight << std::endl;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,

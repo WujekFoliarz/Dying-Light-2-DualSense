@@ -4,6 +4,16 @@ enum currentAction {
 
 };
 
+enum pauseData {
+	PAUSED = 1,
+	UNPAUSED = 0
+};
+
+enum flashlightData {
+	ON = 1,
+	OFF = 0
+};
+
 enum animationData {
 	EMPTY_HANDED_IDLE = 3662,
 	EMPTY_HANDED_WALK_FORWARD = 3748,
