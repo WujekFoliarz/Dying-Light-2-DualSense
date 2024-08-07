@@ -4,7 +4,7 @@ Features:
  - Enhanced adaptive triggers
  - Biomarker LED 
 
-You need to install this program in order for this to work (Controller emulation + UDP) - https://github.com/WujekFoliarz/DualSenseY
+You need to install this program in order for this to work - https://github.com/WujekFoliarz/DualSenseY
 
 Extract the files from Release.zip in Dying Light 2\ph\work\bin\x64
 
