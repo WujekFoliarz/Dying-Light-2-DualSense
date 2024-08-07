@@ -214,20 +214,6 @@ void unpauseHook() {
     }
 }
 
-DWORD64* jmpBackFlashlight;
-unsigned short flashlightStatus = 0;
-__attribute((naked))
-void flashlightHook() {
-    __asm {
-        mov [r14 + 0x000001B4], eax
-        mov [flashlightStatus], eax
-        mov r8d, 0x00010000
-        mov rax, [r14]
-        mov r15, qword ptr[jmpBackFlashlight]
-        jmp r15
-    }
-}
-
 void setTrigger(TriggerModes triggerMode, int triggerThreshold, bool rightTrigger, int force1, int force2, int force3, int force4, int force5, int force6, int force7) {
     if (rightTrigger) {
         rightMode = triggerMode;
@@ -269,7 +255,7 @@ void read() {
     while (true) {
         animation = static_cast<animationData>(fppAnimation);
         pause = static_cast<pauseData>(pauseStatus);
-        flashlight = static_cast<flashlightData>(flashlightStatus);
+        //flashlight = static_cast<flashlightData>(flashlightStatus);
         //std::cout << pause << std::endl;
         if (pause == UNPAUSED) {
             switch (animation)
@@ -492,14 +478,6 @@ void inject() {
     std::cout << callUnpause << std::endl;
 
     std::cout << "----------------------------------" << std::endl;
-
-    DWORD64* flashlightAddress = utils.scanModuleMemory(gameDllModule, "41 89 86 B4 01 00 00 41 B8 00 00 01 00 49 8B 06");
-    std::cout << "flashlight function: ";
-    std::cout << flashlightAddress << std::endl;
-    utils.Detour(reinterpret_cast<DWORD*>((void*)flashlightAddress), flashlightHook, 16);
-    jmpBackFlashlight = utils.scanModuleMemory(gameDllModule, "49 8B CE 48 8B 15 9F F8 F5 01");
-    std::cout << "flashlight jmp back: ";
-    std::cout << jmpBackFlashlight << std::endl;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,
